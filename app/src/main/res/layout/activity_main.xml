@@ -20,7 +20,7 @@
         android:id="@+id/buttonPlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:src="@drawable/baseline_pause_24"
+        android:src="@drawable/baseline_play_arrow_24"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@id/buttonNext"
         app:layout_constraintStart_toEndOf="@id/buttonPrevious"

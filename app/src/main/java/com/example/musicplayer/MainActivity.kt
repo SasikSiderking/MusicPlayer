@@ -1,15 +1,15 @@
 package com.example.musicplayer
 
 import android.content.ComponentName
-import android.content.Intent
 import android.content.ServiceConnection
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.IBinder
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import com.example.musicplayer.databinding.ActivityMainBinding
+import com.example.musicplayer.model.MusicPlayerState
+import com.example.musicplayer.model.PlayButtonState
 
 class MainActivity : AppCompatActivity(), ServiceConnection {
 
@@ -17,7 +17,14 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
     private val binding: ActivityMainBinding
         get() = _binding!!
 
-    private var playButtonState: PlayButtonState = PlayButtonState.PLAYING
+    private var playButtonState: PlayButtonState = PlayButtonState.PLAY
+
+    private val songIds: List<Int> = listOf(
+        R.raw.everlasting_summer,
+        R.raw.can_you_feel_my_heart,
+        R.raw.gangstars_paradise,
+        R.raw.give_me_my_dreams
+    )
 
     var musicService: MusicService? = null
 
@@ -27,8 +34,8 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
         _binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val intent = Intent(this, MusicService::class.java)
-        bindService(intent,this, BIND_AUTO_CREATE)
+        val intent = MusicService.createIntent(this)
+        bindService(intent, this, BIND_AUTO_CREATE)
         startService(intent)
 
         binding.buttonPrevious.setOnClickListener(buttonPreviousOnClickListener)
@@ -37,50 +44,42 @@ class MainActivity : AppCompatActivity(), ServiceConnection {
     }
 
     private val buttonPreviousOnClickListener = View.OnClickListener {
-
+        musicService?.previous(R.drawable.baseline_pause_24)
     }
 
     private val buttonPlayOnClickListener = View.OnClickListener {
-        playButtonState = when(playButtonState){
-            PlayButtonState.PLAYING -> {
-                binding.buttonPlay.setImageResource(R.drawable.baseline_play_arrow_24)
-                musicService?.pause()
-                PlayButtonState.PAUSE
+        when (playButtonState) {
+            PlayButtonState.PLAY -> {
+                musicService?.start(R.drawable.baseline_pause_24)
             }
 
             PlayButtonState.PAUSE -> {
-                binding.buttonPlay.setImageResource(R.drawable.baseline_pause_24)
-                musicService?.start()
-                PlayButtonState.PLAYING
+                musicService?.pause(R.drawable.baseline_play_arrow_24)
             }
         }
     }
 
     private val buttonNextOnClickListener = View.OnClickListener {
-
-    }
-
-    private fun initMediaPlayer(){
-        if (musicService?.mediaPlayer == null){
-            musicService?.mediaPlayer = MediaPlayer.create(this,R.raw.can_you_feel_my_heart)
-        }
-//        musicService?.reset()
-//        musicService?.setDataSource()
-//        musicService?.prepare()
-        musicService?.start()
+        musicService?.next(R.drawable.baseline_pause_24)
     }
 
     override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
         val binder = service as MusicService.MusicServiceBinder
-        musicService = binder.getService()
-        musicService!!.musicPlayerState.observe(this,musicPlayerStateObserver)
-        initMediaPlayer()
-
-        musicService!!.showNotification()
+        musicService = binder.getService(songIds)
+        musicService!!.musicPlayerState.observe(this, musicPlayerStateObserver)
     }
 
-    private val musicPlayerStateObserver = Observer<Boolean>{
+    private val musicPlayerStateObserver = Observer<MusicPlayerState> {
+        playButtonState = it.playButtonState
+        when (it.playButtonState) {
+            PlayButtonState.PLAY -> {
+                binding.buttonPlay.setImageResource(R.drawable.baseline_play_arrow_24)
+            }
 
+            PlayButtonState.PAUSE -> {
+                binding.buttonPlay.setImageResource(R.drawable.baseline_pause_24)
+            }
+        }
     }
 
     override fun onServiceDisconnected(name: ComponentName?) {

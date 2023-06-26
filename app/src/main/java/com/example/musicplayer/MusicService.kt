@@ -1,7 +1,7 @@
 package com.example.musicplayer
 
-import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.media.MediaPlayer
 import android.os.Binder
@@ -10,97 +10,72 @@ import android.support.v4.media.session.MediaSessionCompat
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import com.example.musicplayer.model.MusicPlayerState
+import com.example.musicplayer.model.NotificationActions
+import com.example.musicplayer.model.PlayButtonState
 
 class MusicService : Service() {
 
     private val binder: IBinder = MusicServiceBinder()
 
-    val musicPlayerState: LiveData<Boolean>
+    private var songIds: List<Int> = emptyList()
+
+    private var position: Int = 1
+
+    val musicPlayerState: LiveData<MusicPlayerState>
         get() = _musicPlayerState
-    private val _musicPlayerState: MutableLiveData<Boolean> = MutableLiveData()
+    private val _musicPlayerState: MutableLiveData<MusicPlayerState> = MutableLiveData(
+        MusicPlayerState(PlayButtonState.PLAY)
+    )
 
     private lateinit var mediaSession: MediaSessionCompat
 
-    var mediaPlayer: MediaPlayer? = null
+    private var mediaPlayer: MediaPlayer? = null
 
     override fun onBind(intent: Intent?): IBinder {
         mediaSession = MediaSessionCompat(baseContext, MUSIC_SESSION_TAG)
         return binder
     }
 
-    fun start() {
+    fun start(playIcon: Int) {
+        showNotification(playIcon)
         mediaPlayer?.start()
+        _musicPlayerState.postValue(musicPlayerState.value!!.copy(playButtonState = PlayButtonState.PAUSE))
     }
 
-    fun stop() {
-        mediaPlayer?.stop()
-    }
-
-    fun pause() {
+    fun pause(playIcon: Int) {
+        showNotification(playIcon)
         mediaPlayer?.pause()
+        _musicPlayerState.postValue(musicPlayerState.value!!.copy(playButtonState = PlayButtonState.PLAY))
     }
 
     fun release() {
         mediaPlayer?.release()
     }
 
-    fun reset() {
-        mediaPlayer?.reset()
+    fun isPlaying(): Boolean? {
+        return mediaPlayer?.isPlaying
     }
 
-    fun isPlaying() {
-        mediaPlayer?.isPlaying
+    fun next(playIcon: Int) {
+        if (position == songIds.size - 1) {
+            position = -1
+        }
+        initMediaPlayer(++position)
+        start(playIcon)
     }
 
-    fun setDataSource(path: String) {
-        mediaPlayer?.setDataSource(path)
+    fun previous(playIcon: Int) {
+        if (position == 0) {
+            position = songIds.size
+        }
+        initMediaPlayer(--position)
+        start(playIcon)
     }
 
-    fun prepare() {
-        mediaPlayer?.prepare()
-    }
+    private fun showNotification(playIcon: Int) {
 
-    fun showNotification() {
-
-        val intentPrevious = Intent(baseContext, NotificationActionReceiver::class.java).setAction(
-            NotificationActions.Previous.name
-        )
-        val pendingIntentPrevious = PendingIntent.getBroadcast(
-            baseContext,
-            0,
-            intentPrevious,
-            PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val intentPlay = Intent(baseContext, NotificationActionReceiver::class.java).setAction(
-            NotificationActions.Play.name
-        )
-        val pendingIntentPlay = PendingIntent.getBroadcast(
-            baseContext,
-            0,
-            intentPlay,
-            PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val intentNext = Intent(baseContext, NotificationActionReceiver::class.java).setAction(
-            NotificationActions.Next.name
-        )
-        val pendingIntentNext = PendingIntent.getBroadcast(
-            baseContext,
-            0,
-            intentNext,
-            PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val intentClose = Intent(baseContext, NotificationActionReceiver::class.java).setAction(
-            NotificationActions.Close.name
-        )
-        val pendingIntentClose = PendingIntent.getBroadcast(
-            baseContext,
-            0,
-            intentClose,
-            PendingIntent.FLAG_UPDATE_CURRENT
-        )
+        val intentActionsProvider = IntentActionsProvider(baseContext)
 
         val notification = NotificationCompat.Builder(baseContext, CHANNEL_ID)
             .setContentTitle("Song")
@@ -116,38 +91,41 @@ class MusicService : Service() {
             .addAction(
                 R.drawable.baseline_skip_previous_24,
                 NotificationActions.Previous.name,
-                pendingIntentPrevious
+                intentActionsProvider.pendingIntentPrevious
             )
             .addAction(
-                R.drawable.baseline_play_arrow_24,
+                playIcon,
                 NotificationActions.Play.name,
-                pendingIntentPlay
+                intentActionsProvider.pendingIntentPlay
             )
             .addAction(
                 R.drawable.baseline_skip_next_24,
                 NotificationActions.Next.name,
-                pendingIntentNext
+                intentActionsProvider.pendingIntentNext
             )
             .addAction(
                 R.drawable.baseline_close_24,
                 NotificationActions.Close.name,
-                pendingIntentClose
+                intentActionsProvider.pendingIntentClose
             )
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    private fun initMediaPlayer(){
-        reset()
-        if (mediaPlayer == null){
-            mediaPlayer = MediaPlayer.create(this,R.raw.can_you_feel_my_heart)
-        }
+    private fun initMediaPlayer(position: Int) {
+        release()
+        mediaPlayer = MediaPlayer.create(this, songIds[position])
     }
 
     inner class MusicServiceBinder : Binder() {
-        fun getService(): MusicService{
-            return this@MusicService
+        fun getService(songIds: List<Int>): MusicService {
+            this@MusicService.songIds = songIds
+            initMediaPlayer(position)
+            if (instance == null) {
+                instance = this@MusicService
+            }
+            return instance!!
         }
     }
 
@@ -157,5 +135,16 @@ class MusicService : Service() {
         const val CHANNEL_ID = "musicChannel"
         const val NOTIFICATION_ID = 993
         const val MUSIC_SESSION_TAG = "Music Session"
+
+        fun createIntent(context: Context): Intent {
+            return Intent(context, MusicService::class.java)
+        }
+
+        @Volatile
+        private var instance: MusicService? = null
+        fun getInstance() =
+            instance ?: synchronized(this) {
+                instance ?: MusicService().also { instance = it }
+            }
     }
 }
