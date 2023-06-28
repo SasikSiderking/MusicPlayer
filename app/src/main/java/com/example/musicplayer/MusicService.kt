@@ -79,7 +79,7 @@ class MusicService : Service() {
 
         val notification = NotificationCompat.Builder(baseContext, CHANNEL_ID)
             .setContentTitle("Song")
-            .setContentText("Rammstein")
+            .setContentText("Music is playing")
             .setSmallIcon(R.drawable.baseline_queue_music_24)
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
@@ -120,9 +120,9 @@ class MusicService : Service() {
 
     inner class MusicServiceBinder : Binder() {
         fun getService(songIds: List<Int>): MusicService {
-            this@MusicService.songIds = songIds
-            initMediaPlayer(position)
             if (instance == null) {
+                this@MusicService.songIds = songIds
+                initMediaPlayer(position)
                 instance = this@MusicService
             }
             return instance!!
